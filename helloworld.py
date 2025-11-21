@@ -211,6 +211,6 @@ def showsample():
     plt.show()
  
 if __name__ == "__main__":
-    maintrain()
+    #maintrain()
     showsample()
     pass

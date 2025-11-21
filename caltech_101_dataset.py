@@ -1,7 +1,9 @@
 from torchvision.datasets import Caltech101
 from torchvision import transforms
 from torch.utils.data import DataLoader, random_split
-
+import ssl
+import urllib.request
+ssl._create_default_https_context = ssl._create_unverified_context
 # 必须添加 Resize，因为图片大小不一
 transform = transforms.Compose([
     transforms.Resize((224, 224)),  # 统一分辨率

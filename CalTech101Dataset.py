@@ -230,10 +230,11 @@ def test_cifar():
     filtered_indices = []
 
     for i in range(len(dataset)):
-        sample = dataset[i]
+        image,label = dataset[i]
+        category = dataset.categories[label]
         #'airplane', 'automobile', 'bird', 'cat', 'deer','dog', 'frog', 'horse', 'ship', 'truck'
         fit_class=['airplanes', 'wild_cat','dalmatian','ketch','pigeon']
-        if sample['category'] in fit_class:
+        if category in fit_class:
             filtered_indices.append(i)
     fit_count=[]
     for cls in fit_class:
@@ -249,13 +250,20 @@ def test_cifar():
     i=0
     while i<16:
         lucker=torch.randint(0, len(filtered_indices), (1,)).item()
-        sample = dataset[filtered_indices[lucker]]
-        print(f"类别: {sample['category']}, 文件名: {sample['filename']}, 图像尺寸: {sample['image'].size}")
-        image = sample['image']
-        if sample['category'] in fit_class and fit_count[fit_class.index(sample['category'])][1]<4:
-            newimg = dataset.resize_and_center(image, (64, 64))
-            # Convert PIL Image to tensor
-            # First convert to numpy array, then to tensor
+        image,lable = dataset[filtered_indices[lucker]]
+        category = dataset.categories[lable]
+        print(f"类别: {category}, 图像尺寸: {image.shape}")
+  
+        if category in fit_class and fit_count[fit_class.index(category)][1] < 4:
+            # Convert tensor back to PIL Image for resizing
+            # First convert tensor to numpy array
+            image_np = (image.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+            pil_image = Image.fromarray(image_np)
+            
+            # Now resize using the method
+            newimg = dataset.resize_and_center(pil_image, (64, 64))
+            
+            # Convert PIL Image back to tensor for model input
             newimg_array = np.array(newimg) / 255.0  # Normalize to [0,1]
             newimg_tensor = torch.tensor(newimg_array, dtype=torch.float32)
             # Change dimension order from HWC to CHW and add batch dimension
@@ -272,17 +280,20 @@ def test_cifar():
             with torch.no_grad():
                 output = model(newimg_tensor)    # 预测
                 pred_label = output.argmax(dim=1).item()
-                pred_label =cifar_class[pred_label]
-                axes[i].set_title(f"S:{sample['category']} P:{pred_label}")
-                axes[i].imshow(sample['image'])
+                pred_label = cifar_class[pred_label]
+                axes[i].set_title(f"S:{category} P:{pred_label}")
+                axes[i].imshow(pil_image)
                 axes[i].axis('off')
-                filtered_indices.pop(lucker)
-            i+=1
-            fit_count[fit_class.index(sample['category'])][1]+=1
+                
+            filtered_indices.pop(lucker)
+            i += 1
+            fit_count[fit_class.index(category)][1] += 1
+        elif len(filtered_indices) <= 0:
+            break
     plt.tight_layout()
     plt.show()
 # 使用示例
 if __name__ == "__main__":
     pass
-    test_db()
-    #test_cifar()
+    #test_db()
+    test_cifar()

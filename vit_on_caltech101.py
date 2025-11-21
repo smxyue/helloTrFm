@@ -50,7 +50,7 @@ class ViTForMNIST(nn.Module):
         # 注意：torchvision的ViT模型使用self.vit.heads而不是self.vit.head
         self.vit.heads = nn.Linear(self.vit.heads.head.in_features, num_classes)
         if os.path.exists(model_path):
-            self.load_state_dict(torch.load(model_path))
+            self.load_state_dict(torch.load(model_path,map_location=device))
             print(f"Loaded pretrained weights from {model_path}")
         
     def forward(self, x):
