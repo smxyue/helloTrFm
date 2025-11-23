@@ -210,7 +210,12 @@ def showsample():
     plt.tight_layout()
     plt.show()
  
+def show_image_data():
+    images, labels = train_dataset[0]
+    print(f"Image shape: {images.shape}, Label: {labels}")
+    print(images)
 if __name__ == "__main__":
     #maintrain()
-    showsample()
+    #showsample()
+    show_image_data()
     pass
