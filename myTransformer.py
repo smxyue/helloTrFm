@@ -8,21 +8,12 @@ import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 
-# 2. 数据准备（使用CIFAR-10而非ImageNet，适合初学者）
-# 图像尺寸：32x32 -> 缩放至64x64使其足够大以分割成patches
+from CalTech101Dataset import CalTech101Dataset
 
-transform = transforms.Compose([
-    transforms.Resize(64),  # 将32x32图像放大到64x64
-    transforms.ToTensor(),
-    #transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])
-])
+CHECKPOINT_PATH = 'myTransformer_caltech101.pth'
+train_dataset = CalTech101Dataset(data_dir="./processed")
 
-# 下载数据
-train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
-
-train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False)
+train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
 # 3. Vision Transformer模型构建
 
@@ -99,7 +90,7 @@ class TransformerBlock(nn.Module):
 
 class VisionTransformer(nn.Module):
     """完整的Vision Transformer模型"""
-    def __init__(self, img_size=64, patch_size=8, in_channels=3, n_classes=10, 
+    def __init__(self, img_size=224, patch_size=8, in_channels=3, n_classes=101, 
                  embed_dim=128, depth=6, n_heads=8):
         super().__init__()
         
@@ -146,8 +137,8 @@ class VisionTransformer(nn.Module):
 # 4. 训练配置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = VisionTransformer().to(device)
-if os.path.exists('vit_cifar10.pth'):
-    model.load_state_dict(torch.load('vit_cifar10.pth', map_location=device), strict=False) 
+if os.path.exists(CHECKPOINT_PATH):
+    model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=device), strict=False) 
     print('Loaded model from checkpoint.')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
@@ -184,91 +175,124 @@ def evaluate(model, loader, device):
 def maintrain():
     # 6. 主训练流程
     print(f"Using device: {device}")
-    for epoch in range(10):  # 仅训练10个epochs作为演示
+    for epoch in range(30):  # 仅训练10个epochs作为演示
         train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
-        test_acc = evaluate(model, test_loader, device)
-        print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
-    torch.save(model.state_dict(), 'vit_cifar10.pth')
-    print("Training complete!state_dict saved to 'vit_cifar10.pth'.")
+        #test_acc = evaluate(model, test_loader, device)
+        #print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
+        print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} ")
+    torch.save(model.state_dict(), CHECKPOINT_PATH)
+    print("Training complete!state_dict saved to {CHECKPOINT_PATH}}.")
     # 预期输出（示例）：
     # Epoch 1/10 | Train Loss: 1.9876 | Test Accuracy: 0.3124
     # Epoch 10/10 | Train Loss: 0.4567 | Test Accuracy: 0.7245
 
-def showsample():
-    classnames=train_dataset.classes
-    sample_len=test_dataset.__len__()
-    print(f"Dataset sample length: {sample_len}")
-    fig,axes=plt.subplots(5,5, figsize=(10,10))
-    axes=axes.ravel()
-    pos = torch.randint(0, sample_len-25-1,(1,)).item()
-    for i in range(25):
-        image, label = test_dataset[pos]
-        axes[i].imshow(image.permute(1, 2, 0),vmin=0,vmax=1)
-        axes[i].set_title(classnames[label])
-        axes[i].axis('off')
-        pos+=1
-    plt.tight_layout()
-    plt.show()
 
-def plt_errors(errors):
-    fig,axes=plt.subplots(6,6, figsize=(9,9))
-    axes=axes.ravel()
-    i=0
-    while i<36 and len(errors)>0:
-        sample=errors.pop(0)
-        image=sample[0].transpose(1, 2, 0)  # Change from (C,H,W) to (H,W,C)
-        label = sample[1]
-        label=sample[1]
-        predicted=sample[2]
-        
-        
-        axes[i].imshow(image,vmin=0,vmax=1)
-        axes[i].set_title(f'{train_dataset.classes[label]}\nPred: {train_dataset.classes[predicted]}')
-        axes[i].axis('off')
-        i+=1
-    plt.tight_layout()
-    plt.show()
-def test_model_1():
+def predict():
+    model = VisionTransformer().to(device)
+    if os.path.exists(CHECKPOINT_PATH):
+        model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=device))
+    else:
+        print(f"Model weights not found at {CHECKPOINT_PATH}!")
+        return
     model.eval()
-    correct = 0
-    total = 0
-    err_sample = []
-    with torch.no_grad():
-        for images, labels in train_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            # Find mismatched samples
-            mask = predicted != labels
-            if mask.any():
-                # Store mismatched items without converting to scalar
-                mismatched_images = images[mask].cpu()
-                mismatched_labels = labels[mask].cpu()
-                mismatched_predictions = predicted[mask].cpu()
-                 # Iterate over each mismatch and store separately
-                for img, lbl, pred in zip(mismatched_images, mismatched_labels, mismatched_predictions):
-                    err_sample.append((img.numpy(), lbl.item(), pred.item()))
-  
-    print(f"correct:{correct} error:{total - correct}Test Accuracy: {correct / total:.4f} ")
-
-    while len(err_sample)>0:
-        print(f"Remaining error samples to plot: {len(err_sample)}")
-        plts=err_sample[:36]
-        err_sample=err_sample[36:]
-        plt_errors(plts)
+    dataset = CalTech101Dataset()
+    categories = dataset.categories
+    dataset.close()
+    fig, axes = plt.subplots(3, 3, figsize=(10, 10))
+    axes = axes.ravel()
+    c=0
+    while c<9:
+        # Create a simple GUI for file selection
+        try:
+            import tkinter as tk
+            from tkinter import filedialog
         
+            root = tk.Tk()
+            root.withdraw()  # Hide the main window
+            root.attributes('-topmost', True)  # Make dialog appear on top
+        
+            # Open file dialog to select JPG file
+            image_path = filedialog.askopenfilename(
+                title="Select a JPG Image",
+                filetypes=[
+                    ("JPEG files", "*.jpg *.jpeg"),
+                    ("PNG files", "*.png"),
+                    ("All image files", "*.jpg *.jpeg *.png *.bmp"),
+                    ("All files", "*.*")
+                ]
+            )
+        
+            # Destroy the root window
+            root.destroy()
+        
+            # Check if user cancelled the dialog
+            if not image_path:
+                print("No file selected.")
+                return
+            
+            print(f"Selected file: {image_path}")
+        
+        except ImportError:
+            print("tkinter not available. Falling back to manual input...")
+            image_path = input("Enter the path to your JPG image: ").strip()
     
-
-
-def show_image_data():
-    images, labels = train_dataset[0]
-    print(f"Image shape: {images.shape}, Label: {labels}")
-    print(images)
+        if not os.path.exists(image_path):
+            print(f"Image file {image_path} not found!")
+            return
+    
+        # Process image
+        try:
+            from PIL import Image
+            import torchvision.transforms as T
+        
+            # Define preprocessing transforms (same as used during training)
+            preprocess = T.Compose([
+                T.Resize((224, 224)),  # ViT requires 224x224 images
+                T.ToTensor(),          # Convert to tensor and scale to [0,1]
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
+            ])
+        
+            # Load and process image
+            image = Image.open(image_path).convert('RGB')  # Ensure RGB format
+            input_tensor = preprocess(image)
+            input_batch = input_tensor.unsqueeze(0).to(device)  # Add batch dimension
+        
+            print(f"Processed image shape: {input_batch.shape}")
+        
+            # Make prediction
+            with torch.no_grad():
+                output = model(input_batch)
+                probabilities = torch.nn.functional.softmax(output[0], dim=0)
+                predicted_class = torch.argmax(probabilities).item()
+                confidence = probabilities[predicted_class].item()
+            # Get category name if available
+            if categories and predicted_class < len(categories):
+                predicted_category = categories[predicted_class]
+            else:
+                predicted_category = f"Class {predicted_class}"    
+            print(f"Predicted class index: {predicted_class}")
+            print(f"Confidence: {confidence:.4f}")
+            print(f"Top 5 predictions:")
+        
+            # Show top 5 predictions
+            top5_prob, top5_catid = torch.topk(probabilities, 5)
+            for j in range(top5_prob.size(0)):
+                print(f"{j+1}. Class {top5_catid[j].item()}: {top5_prob[j].item():.4f}")
+            
+            # Display image
+ 
+            axes[c].imshow(image)
+            axes[c].set_title(f"{predicted_category}:({confidence:.2f})")
+            axes[c].axis('off')
+            c+=1
+        
+        except Exception as e:
+            print(f"Error processing image: {str(e)}")
+    fig.tight_layout()
+    plt.show()
 if __name__ == "__main__":
     #maintrain()
+    predict()
     #showsample()
     #show_image_data()
-    test_model_1()
     pass

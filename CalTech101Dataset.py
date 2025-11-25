@@ -250,7 +250,8 @@ def test_cifar():
     i=0
     while i<16:
         lucker=torch.randint(0, len(filtered_indices), (1,)).item()
-        image,lable = dataset[filtered_indices[lucker]]
+        sample = dataset[filtered_indices[lucker]]
+        image,lable = sample[0],sample[1]
         category = dataset.categories[lable]
         print(f"类别: {category}, 图像尺寸: {image.shape}")
   

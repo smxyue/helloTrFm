@@ -112,7 +112,7 @@ def evaluate(model, test_loader, criterion, device):
 def main():
     # 超参数配置
     config = {
-        'batch_size': 64,
+        'batch_size': 32,
         'epochs': 10,
         'lr': 1e-4,
         'model_name': 'vit_b_16',  # 可选: 'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32'
@@ -283,8 +283,9 @@ def show_catalogries():
     dataset.close()
     print(f"Categories: {categories}")
     print(f"Total number of images: {len(dataset)}")
-    print(f"Image shape: {dataset[0][0].shape}")
+    
 if __name__ == '__main__':
+    #main()
     predict()
     #show_catalogries()
     pass
