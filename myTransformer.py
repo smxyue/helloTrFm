@@ -229,8 +229,6 @@ def predict():
             if not image_path:
                 print("No file selected.")
                 return
-            
-            print(f"Selected file: {image_path}")
         
         except ImportError:
             print("tkinter not available. Falling back to manual input...")
@@ -249,16 +247,16 @@ def predict():
             preprocess = T.Compose([
                 T.Resize((224, 224)),  # ViT requires 224x224 images
                 T.ToTensor(),          # Convert to tensor and scale to [0,1]
-                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
+                #.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
             ])
         
             # Load and process image
             image = Image.open(image_path).convert('RGB')  # Ensure RGB format
+            image = dataset.resize_and_center(image, (224, 224))
             input_tensor = preprocess(image)
             input_batch = input_tensor.unsqueeze(0).to(device)  # Add batch dimension
         
-            print(f"Processed image shape: {input_batch.shape}")
-        
+                    
             # Make prediction
             with torch.no_grad():
                 output = model(input_batch)

@@ -3,3 +3,4 @@ vit_b_16_caltech101.pth
 /data
 /processed
 best_vit_b_16_mnist.pth
+/testdata
