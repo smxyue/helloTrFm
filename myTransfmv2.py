@@ -7,10 +7,12 @@ import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 
 from CalTech101Dataset import CalTech101Dataset
+from test_caltech_dataset import MYCaltechDataset
 
-CHECKPOINT_PATH = 'myTransformer_caltech101.pth'
+CHECKPOINT_PATH = 'myTransfmv2.pth'
 train_dataset = CalTech101Dataset(data_dir="./processed")
 
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
@@ -19,7 +21,7 @@ train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
 
 class PatchEmbedding(nn.Module):
     """将图像分割成patches并嵌入到向量空间"""
-    def __init__(self, img_size=224, patch_size=8, in_channels=3, embed_dim=128):
+    def __init__(self, img_size=64, patch_size=8, in_channels=3, embed_dim=128):
         super().__init__()
         self.img_size = img_size
         self.patch_size = patch_size
@@ -87,7 +89,7 @@ class TransformerBlock(nn.Module):
         # MLP + 残差连接
         x = x + self.mlp(self.norm2(x))
         return x
-
+    
 class VisionTransformer(nn.Module):
     """完整的Vision Transformer模型"""
     def __init__(self, img_size=224, patch_size=8, in_channels=3, n_classes=101, 
@@ -133,6 +135,11 @@ class VisionTransformer(nn.Module):
         # 提取CLS token用于分类
         x = self.norm(x[:, 0])  # 只取第一个token (CLS token)
         return self.head(x)
+    def netsize(self):
+        """计算模型参数量"""
+        total_params = sum(p.numel() for p in self.parameters())
+        return total_params
+
 
 # 4. 训练配置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -142,13 +149,17 @@ if os.path.exists(CHECKPOINT_PATH):
     print('Loaded model from checkpoint.')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
 
 # 5. 训练循环
 def train_epoch(model, loader, criterion, optimizer, device):
-    model.train()
+    
     total_loss = 0
-    for images, labels in loader:
+    model.train()
+    pbar = tqdm(enumerate(loader), total=len(loader), desc="Training")
+    
+    for batch_idx, (images, labels) in pbar:
         images, labels = images.to(device), labels.to(device)
         
         optimizer.zero_grad()
@@ -156,8 +167,22 @@ def train_epoch(model, loader, criterion, optimizer, device):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        
+        scheduler.step(loss)
         total_loss += loss.item()
+        pbar.set_postfix({'Loss': f'{loss.item():.4f}'})
+        testdata = MYCaltechDataset(train=False)
+        test_loader = DataLoader(testdata, batch_size=32, shuffle=False)
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for images, labels in test_loader:
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+    print(f"Loss: {loss.item():.4f}Test Accuracy: {correct / total:.4f} Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")        
     return total_loss / len(loader)
 
 def evaluate(model, loader, device):
@@ -289,8 +314,10 @@ def predict():
     fig.tight_layout()
     plt.show()
 if __name__ == "__main__":
+    model = VisionTransformer().to(device)
+    print(model.netsize())
     #maintrain()
-    predict()
+    #predict()
     #showsample()
     #show_image_data()
     pass

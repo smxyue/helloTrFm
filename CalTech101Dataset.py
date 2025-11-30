@@ -84,7 +84,8 @@ class CalTech101Dataset:
         self.image_size = metadata["image_size"]  # [H, W, C]
         self.categories = metadata["categories"]
         self.image_infos = metadata["images"]
-        
+        if "BACKGROUND_Google" in self.categories:
+            self.categories.remove("BACKGROUND_Google")
         print(f"加载数据集: {self.num_images} 张图片, {len(self.categories)} 个类别")
         print(f"图像尺寸: {self.image_size}")
     
@@ -293,8 +294,12 @@ def test_cifar():
             break
     plt.tight_layout()
     plt.show()
+
 # 使用示例
 if __name__ == "__main__":
     pass
     #test_db()
-    test_cifar()
+    #test_cifar()
+    dataset = CalTech101Dataset(data_dir="processed")
+    print( dataset.categories)
+   
