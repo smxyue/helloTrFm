@@ -174,10 +174,10 @@ class MYCaltechDataset(Dataset):
             # Select either training or test samples
             if self.train:
                 # All but last 3 images for training
-                selected_files = image_files[:-3] if len(image_files) > 3 else image_files
+                selected_files = image_files[:-5] if len(image_files) > 5 else image_files
             else:
                 # Last 3 images for testing
-                selected_files = image_files[-3:] if len(image_files) >= 3 else image_files
+                selected_files = image_files[-5:] if len(image_files) >= 5 else image_files
             
             # Add samples to the list
             for file_name in selected_files:

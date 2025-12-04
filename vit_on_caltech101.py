@@ -1,4 +1,5 @@
 import os
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, Subset
@@ -6,7 +7,6 @@ from torchvision import datasets, transforms, models
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import sys
-sys.path.append("D:\\yue\\helloTrFm\\data\\caltech101")
 from CalTech101Dataset import CalTech101Dataset
 
 
@@ -17,11 +17,10 @@ print(f"Using device: {device}")
 
 def get_data_loaders(batch_size=128):
     
-    all_data = CalTech101Dataset()
-    
-    train_dataset = Subset(all_data, range(0, len(all_data) - 1000))  # First N-1000 samples
-    test_dataset = Subset(all_data, range(len(all_data) - 1000, len(all_data)))  # Last 1000 samples
-    
+    train_dataset=CalTech101Dataset(train=True)
+    test_dataset=CalTech101Dataset(train=False)
+    print(f"Number of training samples: {len(train_dataset)}")
+    print(f"Number of testing samples: {len(test_dataset)}")
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
     
@@ -30,24 +29,39 @@ def get_data_loaders(batch_size=128):
 # ==================== 2. 模型定义 ====================
 
 class ViTForMNIST(nn.Module):
-    """使用torchvision预训练的ViT模型"""
-    def __init__(self, model_name='vit_b_16', pretrained=True, num_classes=102):
+    """Using torchvision pre-trained ViT model"""
+    def __init__(self, model_name='vit_b_16', pretrained=True, num_classes=101):
         super().__init__()
         
-        # 加载torchvision预定义模型
+        # Load torchvision predefined model with new weights parameter
         if model_name == 'vit_b_16':
-            self.vit = models.vit_b_16(pretrained=pretrained)
+            if pretrained:
+                weights = models.ViT_B_16_Weights.DEFAULT
+            else:
+                weights = None
+            self.vit = models.vit_b_16(weights=weights)
         elif model_name == 'vit_b_32':
-            self.vit = models.vit_b_32(pretrained=pretrained)
+            if pretrained:
+                weights = models.ViT_B_32_Weights.DEFAULT
+            else:
+                weights = None
+            self.vit = models.vit_b_32(weights=weights)
         elif model_name == 'vit_l_16':
-            self.vit = models.vit_l_16(pretrained=pretrained)
+            if pretrained:
+                weights = models.ViT_L_16_Weights.DEFAULT
+            else:
+                weights = None
+            self.vit = models.vit_l_16(weights=weights)
         elif model_name == 'vit_l_32':
-            self.vit = models.vit_l_32(pretrained=pretrained)
+            if pretrained:
+                weights = models.ViT_L_32_Weights.DEFAULT
+            else:
+                weights = None
+            self.vit = models.vit_l_32(weights=weights)
         else:
             raise ValueError(f"Unsupported model: {model_name}")
         
-        # 修改分类头（从1000类改为10类）
-        # 注意：torchvision的ViT模型使用self.vit.heads而不是self.vit.head
+        # Modify classification head (from 1000 classes to desired number)
         self.vit.heads = nn.Linear(self.vit.heads.head.in_features, num_classes)
         if os.path.exists(model_path):
             self.load_state_dict(torch.load(model_path,map_location=device))
@@ -66,7 +80,7 @@ def train_one_epoch(model, train_loader, optimizer, criterion, device):
     total = 0
     
     pbar = tqdm(train_loader, desc='Training')
-    for data, target in pbar:
+    for (data, target) in pbar:
         data, target = data.to(device), target.to(device)
         
         optimizer.zero_grad()
@@ -113,7 +127,7 @@ def main():
     # 超参数配置
     config = {
         'batch_size': 32,
-        'epochs': 10,
+        'epochs': 5,
         'lr': 1e-4,
         'model_name': 'vit_b_16',  # 可选: 'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32'
         'pretrained': True,  # 使用ImageNet预训练权重
@@ -129,7 +143,7 @@ def main():
     model = ViTForMNIST(
         model_name=config['model_name'],
         pretrained=config['pretrained'],
-        num_classes=102
+        num_classes=101
     ).to(device)
     
     # 损失函数和优化器
@@ -174,7 +188,7 @@ def predict():
     model = ViTForMNIST(
         model_name="vit_b_16",
         pretrained=False,
-        num_classes=102
+        num_classes=101
     ).to(device)
     if os.path.exists(model_path):
         model.load_state_dict(torch.load(model_path, map_location=device))
@@ -277,6 +291,25 @@ def predict():
             print(f"Error processing image: {str(e)}")
     fig.tight_layout()
     plt.show()
+
+def test_test_dataset():
+    min=100
+    train_dataset=[]
+    test_dataset=[]
+    all_data=CalTech101Dataset()
+    for i in range(101):
+        crtClass=all_data.get_images_by_category(all_data.categories[i])
+        for img in crtClass[:-5]:
+            train_dataset.append((img,i))
+        for img in crtClass[-5:]:
+            test_dataset.append((img,i))
+        if len(crtClass)<min:
+            min=len(crtClass)
+    train_dataset=np.concatenate(train_dataset,axis=0)
+    test_dataset=np.concatenate(test_dataset,axis=0)
+    print(f"Minimum number of images in a class: {min}")
+    print(f"Total number of images: {len(all_data)} train dataset: {len(train_dataset)} test dataset: {len(test_dataset)}")
+    print("shape of sample",test_dataset[0].shape)
 def show_catalogries():
     dataset = CalTech101Dataset()
     categories = dataset.categories
@@ -288,4 +321,5 @@ if __name__ == '__main__':
     #main()
     predict()
     #show_catalogries()
+    #test_test_dataset()
     pass

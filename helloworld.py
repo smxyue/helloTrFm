@@ -2,15 +2,19 @@
 import pickle
 import os
 from matplotlib import pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from mylib import load_images, select_test_file
 
 # 2. 数据准备（使用CIFAR-10而非ImageNet，适合初学者）
 # 图像尺寸：32x32 -> 缩放至64x64使其足够大以分割成patches
-
+CHECKPOINT_PATH = 'vit_cifar10.pth'
 transform = transforms.Compose([
     transforms.Resize(64),  # 将32x32图像放大到64x64
     transforms.ToTensor(),
@@ -146,29 +150,45 @@ class VisionTransformer(nn.Module):
 # 4. 训练配置
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = VisionTransformer().to(device)
-if os.path.exists('vit_cifar10.pth'):
-    model.load_state_dict(torch.load('vit_cifar10.pth', map_location=device), strict=False) 
-    print('Loaded model from checkpoint.')
+if os.path.exists(CHECKPOINT_PATH):
+    model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=device), strict=False) 
+    print(f'Loaded model from checkpoint.{CHECKPOINT_PATH}')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+    optimizer, 
+    patience=10,     # 等待10个epoch如果没有改善就调整学习率
+    factor=0.5,      # 调整因子：lr = lr * 0.5
+    mode='min'       # 监控指标越小越好（这里是loss）
+)
 
 # 5. 训练循环
-def train_epoch(model, loader, criterion, optimizer, device):
-    model.train()
-    total_loss = 0
-    for images, labels in loader:
-        images, labels = images.to(device), labels.to(device)
+def train_model():
+     # 6. 主训练流程
+    epoches=10
+    print(f"Using device: {device}")
+    for epoch in range(epoches):  # 仅训练10个epochs作为演示
+        pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc="Training")
+        model.train()
+        total_loss = 0
+        for batch_idx, (images, labels) in pbar:
+            images, labels = images.to(device), labels.to(device)
         
-        optimizer.zero_grad()
-        outputs = model(images)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            outputs = model(images)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+            pbar.set_postfix({'Loss': f'{loss.item():.4f}', 'LR': f'{optimizer.param_groups[0]["lr"]:.6f}'})
+            total_loss += loss.item()
+            #scheduler.step(loss.item())
         
-        total_loss += loss.item()
-    return total_loss / len(loader)
-
+        test_acc = evaluate(model, test_loader, device)
+        print(f"Epoch {epoch+1}/{epoches} | Train Loss: {total_loss / len(train_loader):.4f} | Test Accuracy: {test_acc:.4f}")
+    torch.save(model.state_dict(), CHECKPOINT_PATH)
+    print(f"Training complete!state_dict saved to {CHECKPOINT_PATH}.")
+    
 def evaluate(model, loader, device):
     model.eval()
     correct = 0
@@ -181,18 +201,6 @@ def evaluate(model, loader, device):
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
     return correct / total
-def maintrain():
-    # 6. 主训练流程
-    print(f"Using device: {device}")
-    for epoch in range(10):  # 仅训练10个epochs作为演示
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
-        test_acc = evaluate(model, test_loader, device)
-        print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
-    torch.save(model.state_dict(), 'vit_cifar10.pth')
-    print("Training complete!state_dict saved to 'vit_cifar10.pth'.")
-    # 预期输出（示例）：
-    # Epoch 1/10 | Train Loss: 1.9876 | Test Accuracy: 0.3124
-    # Epoch 10/10 | Train Loss: 0.4567 | Test Accuracy: 0.7245
 
 def showsample():
     classnames=train_dataset.classes
@@ -260,15 +268,37 @@ def test_model_1():
         plt_errors(plts)
         
     
+def test_by_file():
+    test_file=select_test_file(9)
+    test_images=load_images(test_file, target_size=(64,64))
+    np_image=np.array(test_images)
+    test_tensors=torch.tensor(np_image).permute(0,3,1,2).float()/255.0  # Convert to (N,C,H,W) and normalize
+    test_tensors=test_tensors.to(device)
+    model.eval()
+    with torch.no_grad():
+        outputs = model(test_tensors)
+        _, predicted = torch.max(outputs.data, 1)
+        fig,axes=plt.subplots(3,3, figsize=(15,15))
+        axes=axes.flatten()
 
+        for i, (img,pred) in enumerate(zip(test_images, predicted.cpu().numpy())):
+            axes[i].imshow(img)
+            axes[i].set_title(f'Pred: {train_dataset.classes[pred]}')
+            axes[i].axis('off')
+        fig.tight_layout()
+        plt.show()
 
 def show_image_data():
     images, labels = train_dataset[0]
     print(f"Image shape: {images.shape}, Label: {labels}")
     print(images)
 if __name__ == "__main__":
-    #maintrain()
+    dataset =torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    for cls in dataset.classes:
+        print(cls)
+    #train_model()
     #showsample()
     #show_image_data()
-    test_model_1()
+    #test_model_1()
+    test_by_file()
     pass

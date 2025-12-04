@@ -17,7 +17,7 @@ from helloworld import VisionTransformer
 
 
 class CalTech101Dataset:
-    def __init__(self, data_dir="processed", target_size=(224, 224)):
+    def __init__(self, data_dir="processed", target_size=(224, 224),train=None):
         """
         Caltech101数据集类
         
@@ -28,7 +28,7 @@ class CalTech101Dataset:
         self.data_dir = data_dir
         self.target_size = target_size
         self.image_bytes_per_file = target_size[0] * target_size[1] * 3
-        
+        self.train = train
         # 文件路径
         self.metadata_path = os.path.join(data_dir, "metadata.json")
         self.bin_path = os.path.join(data_dir, "caltech101_data.bin")
@@ -37,14 +37,18 @@ class CalTech101Dataset:
         # 检查并解压文件
         self._check_and_extract()
         
-        # 加载元数据
         self._load_metadata()
+        
+        # 构建类别到索引的映射
+        self.category_to_idx = {cat: idx for idx, cat in enumerate(self.categories)}
+        
+        # 如果指定了train模式，则准备相应的数据索引
+        self._prepare_train_test_indices()
+
         
         # 打开二进制文件
         self.bin_file = open(self.bin_path, 'rb')
         
-        # 构建类别到索引的映射
-        self.category_to_idx = {cat: idx for idx, cat in enumerate(self.categories)}
         
     def _check_and_extract(self):
         """检查文件是否存在，如有需要则解压"""
@@ -88,9 +92,39 @@ class CalTech101Dataset:
             self.categories.remove("BACKGROUND_Google")
         print(f"加载数据集: {self.num_images} 张图片, {len(self.categories)} 个类别")
         print(f"图像尺寸: {self.image_size}")
-    
+    def _prepare_train_test_indices(self):
+        """
+        准备训练和测试数据索引
+        每个类别最后5张图片作为测试集，其余作为训练集
+        """
+        train_indices = []
+        test_indices = []
+        
+        # 对每个类别分别处理
+        for category in self.categories:
+            # 获取当前类别的所有图片索引
+            category_indices = self.get_images_by_category(category)
+            
+            # 分割训练和测试索引
+            if len(category_indices) > 5:
+                train_indices.extend(category_indices[:-5])  # 除最后5张外的所有图片
+                test_indices.extend(category_indices[-5:])   # 最后5张图片
+            else:
+                # 如果类别图片少于5张，则全部作为训练集
+                train_indices.extend(category_indices)
+        
+        self.train_indices = train_indices
+        self.test_indices = test_indices
+        
+        # 根据train参数设置当前使用的索引
+        if self.train:
+            self.current_indices = self.train_indices
+        else:
+            self.current_indices = self.test_indices
     def __len__(self):
         """返回数据集大小"""
+        if self.train is not None:
+            return len(self.current_indices)
         return self.num_images
     
     def __getitem__(self, idx):
@@ -103,8 +137,14 @@ class CalTech101Dataset:
         Returns:
             dict: 包含 'image', 'category', 'category_idx', 'filename'
         """
-        if idx < 0 or idx >= self.num_images:
-            raise IndexError(f"索引 {idx} 超出范围 [0, {self.num_images-1}]")
+        if self.train is not None:
+            if idx < 0 or idx >= len(self.current_indices):
+                raise IndexError(f"索引 {idx} 超出范围 [0, {len(self.current_indices)-1}]")
+            actual_idx = self.current_indices[idx]
+        else:
+            if idx < 0 or idx >= self.num_images:
+                raise IndexError(f"索引 {idx} 超出范围 [0, {self.num_images-1}]")
+            actual_idx = idx        
         
         # 获取图像信息
         img_info = self.image_infos[idx]
@@ -294,12 +334,22 @@ def test_cifar():
             break
     plt.tight_layout()
     plt.show()
-
+def test_db2():
+    train_dataset = CalTech101Dataset(data_dir="processed",train=True)
+    test_dataset = CalTech101Dataset(data_dir="processed",train=False)
+    print(f"训练集大小: {len(train_dataset)} 测试集大小: {len(test_dataset)}")
+    
+    for i in range(5):# 获取单个样本
+        sample = test_dataset[i]
+        image, label = sample
+        print(f"样本 {i} - 类别: {test_dataset.categories[label]}, 图像尺寸: {image.size}")
+    
+   
 # 使用示例
 if __name__ == "__main__":
     pass
-    #test_db()
+    test_db2()
     #test_cifar()
-    dataset = CalTech101Dataset(data_dir="processed")
-    print( dataset.categories)
+    #dataset = CalTech101Dataset(data_dir="processed")
+    #print( dataset.categories)
    

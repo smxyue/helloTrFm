@@ -149,7 +149,7 @@ if os.path.exists(CHECKPOINT_PATH):
     print('Loaded model from checkpoint.')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
 
 # 5. 训练循环
@@ -167,9 +167,9 @@ def train_epoch(model, loader, criterion, optimizer, device):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        scheduler.step(loss)
+        #scheduler.step(loss)
         total_loss += loss.item()
-        pbar.set_postfix({'Loss': f'{loss.item():.4f}'})
+        pbar.set_postfix({'Loss': f'{loss.item():.4f}', 'LR': f'{optimizer.param_groups[0]["lr"]:.6f}'})
         testdata = MYCaltechDataset(train=False)
         test_loader = DataLoader(testdata, batch_size=32, shuffle=False)
     model.eval()
@@ -200,13 +200,13 @@ def evaluate(model, loader, device):
 def maintrain():
     # 6. 主训练流程
     print(f"Using device: {device}")
-    for epoch in range(30):  # 仅训练10个epochs作为演示
+    for epoch in range(40):  # 仅训练10个epochs作为演示
         train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
         #test_acc = evaluate(model, test_loader, device)
         #print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
-        print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} ")
+        print(f"Epoch {epoch+1}/40 | Train Loss: {train_loss:.4f} ")
     torch.save(model.state_dict(), CHECKPOINT_PATH)
-    print("Training complete!state_dict saved to {CHECKPOINT_PATH}}.")
+    print(f"Training complete!state_dict saved to {CHECKPOINT_PATH}.")
     # 预期输出（示例）：
     # Epoch 1/10 | Train Loss: 1.9876 | Test Accuracy: 0.3124
     # Epoch 10/10 | Train Loss: 0.4567 | Test Accuracy: 0.7245
@@ -314,9 +314,9 @@ def predict():
     fig.tight_layout()
     plt.show()
 if __name__ == "__main__":
-    model = VisionTransformer().to(device)
-    print(model.netsize())
-    #maintrain()
+    #model = VisionTransformer().to(device)
+    #print(model.netsize())
+    maintrain()
     #predict()
     #showsample()
     #show_image_data()
