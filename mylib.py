@@ -3,6 +3,8 @@ import tkinter as tk
 from tkinter import filedialog
 from PIL import Image
 from matplotlib import pyplot as plt
+import numpy as np
+import torch
 import torchvision.transforms as T
 def select_test_file(count):
     c=0
@@ -34,7 +36,7 @@ def select_test_file(count):
                 print("No file selected.")
                 return
             
-            print(f"Selected file: {image_path}")
+            #print(f"Selected file: {image_path}")
         
         except ImportError:
             print("tkinter not available. Falling back to manual input...")
@@ -53,6 +55,46 @@ def select_test_file(count):
         except Exception as e:
             print(f"Error processing image: {str(e)}")
     return images
+def test_by_file(nCount,model,categories):
+    mydevice = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    test_file = select_test_file(nCount*nCount)
+    processed_images = []
+    for f in test_file:
+        img=Image.open(f).convert('RGB')
+        img = resize_and_center(img, (224, 224))
+        image_array=np.array(img)
+        processed_img = torch.from_numpy(image_array).float()
+        processed_img = processed_img.permute(2, 0, 1) / 255.0  # Convert to CxHxW and scale to [0,1]
+        processed_images.append(processed_img)
+        test_tensors = torch.stack(processed_images)  # Stack into batch tensor
+    test_tensors=test_tensors.to(mydevice)
+    model.to(mydevice)
+    model.eval()
+    with torch.no_grad():
+        outputs = model(test_tensors)
+        probabilities = torch.nn.functional.softmax(outputs, dim=1)
+        predicted_classes = torch.argmax(probabilities, dim=1)  # Get predicted class for each sample
+         # Get category name if available
+        #probs, predicted = torch.max(outputs.data, 1)
+        fig,axes=plt.subplots(nCount,nCount, figsize=(15,15))
+        axes=axes.flatten()
+        num_images = len(test_file)
+        for i in range(num_images):
+            img = test_tensors[i].permute(1, 2, 0).cpu().numpy()  # Convert tensor to HWC format for plotting
+            pred = predicted_classes[i].item()
+            prob = probabilities[i][pred].item()  # Probability of the predicted class for this sample
+            
+            axes[i].imshow(img)
+            # Make sure we don't access out-of-bounds category index
+            if pred < len(categories):
+                category_name = categories[pred]
+            else:
+                category_name = f"Class {pred}"
+                
+            axes[i].set_title(f'Pred: {category_name} ({prob:.2f})')
+            axes[i].axis('off')
+        fig.tight_layout()
+        plt.show()
 def resize_and_center(img, target_size):
         """
         按比例缩放图像并居中
@@ -99,6 +141,12 @@ def load_images(image_paths, target_size=(224, 224)):
         img = resize_and_center(img, target_size)
         processed_images.append(img)
     return processed_images
+
+def show_paremeters(model):
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total parameters: {total_params}")
+    print(f"Trainable parameters: {trainable_params}")
 def test1():
     selected_files = select_test_file(9)
     print(f"Number of selected images: {len(selected_files)}")

@@ -11,13 +11,12 @@ import torch
 import sys
 
 import torchvision
-sys.path.append('D:\yue\helloTrFm')
 from helloworld import VisionTransformer
 
 
 
 class CalTech101Dataset:
-    def __init__(self, data_dir="processed", target_size=(224, 224),train=None):
+    def __init__(self, data_dir="processed", target_size=(224, 224),train=None, transform=None):
         """
         Caltech101数据集类
         
@@ -29,6 +28,7 @@ class CalTech101Dataset:
         self.target_size = target_size
         self.image_bytes_per_file = target_size[0] * target_size[1] * 3
         self.train = train
+        self.transform = transform
         # 文件路径
         self.metadata_path = os.path.join(data_dir, "metadata.json")
         self.bin_path = os.path.join(data_dir, "caltech101_data.bin")
@@ -147,7 +147,7 @@ class CalTech101Dataset:
             actual_idx = idx        
         
         # 获取图像信息
-        img_info = self.image_infos[idx]
+        img_info = self.image_infos[actual_idx]
         
         # 从二进制文件读取图像数据
         self.bin_file.seek(img_info["offset"])
@@ -159,7 +159,11 @@ class CalTech101Dataset:
             (self.image_size[1], self.image_size[0]), 
             img_bytes
         )
-        image = torch.from_numpy(np.array(image)).permute(2,0,1).float()/255.0
+        if self.transform:
+            image = self.transform(image)
+        else:
+            image = torch.from_numpy(np.array(image)).permute(2,0,1).float()/255.0
+       
         label = self.categories.index(img_info['category'])
         label = torch.tensor(label)
         return image,label
@@ -338,18 +342,43 @@ def test_db2():
     train_dataset = CalTech101Dataset(data_dir="processed",train=True)
     test_dataset = CalTech101Dataset(data_dir="processed",train=False)
     print(f"训练集大小: {len(train_dataset)} 测试集大小: {len(test_dataset)}")
-    
-    for i in range(5):# 获取单个样本
-        sample = test_dataset[i]
+    startIndex = torch.randint(0, len(train_dataset)-100, (1,)).item()
+    fig,axes=plt.subplots(10,10, figsize=(10,10))
+    axes=axes.ravel()
+    fig.suptitle(f"CalTech101 start:{startIndex}")
+    for i in range(100):
+        sample = train_dataset[startIndex + i]
         image, label = sample
-        print(f"样本 {i} - 类别: {test_dataset.categories[label]}, 图像尺寸: {image.size}")
-    
-   
+        # 显示图像（需要matplotlib）
+        try:
+            axes[i].imshow(image.permute(1,2,0))  # Need to permute dimensions for visualization
+            axes[i].set_title(f"{label.item()}")
+            axes[i].axis('off')
+                
+        except ImportError:
+            print("未安装matplotlib，无法显示图像")
+    fig.tight_layout()
+    plt.show()
+def find_errimg():
+    dataset = CalTech101Dataset(data_dir="processed",train=False )
+    err_list=[]
+    for i in range(len(dataset)):
+        try:
+            sample = dataset[i]
+            image, label = sample
+            image = image/255.0
+            
+        except Exception as e:
+            err_list.append((i,str(label.item()) + ":"+str(e)))
+    print(f"发现 {len(err_list)} 张错误图片")
+    for idx,err in err_list:
+        print(f"索引: {idx}, 错误: {err}")
 # 使用示例
 if __name__ == "__main__":
     pass
-    test_db2()
+    #find_errimg()
+    #test_db2()
     #test_cifar()
-    #dataset = CalTech101Dataset(data_dir="processed")
-    #print( dataset.categories)
+    dataset = CalTech101Dataset(data_dir="processed")
+    print( dataset.categories)
    

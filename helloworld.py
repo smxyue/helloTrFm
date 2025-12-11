@@ -104,7 +104,7 @@ class TransformerBlock(nn.Module):
 class VisionTransformer(nn.Module):
     """完整的Vision Transformer模型"""
     def __init__(self, img_size=64, patch_size=8, in_channels=3, n_classes=10, 
-                 embed_dim=128, depth=6, n_heads=8):
+                 embed_dim=128, depth=12, n_heads=16):
         super().__init__()
         
         # Patch嵌入层
@@ -155,18 +155,15 @@ if os.path.exists(CHECKPOINT_PATH):
     print(f'Loaded model from checkpoint.{CHECKPOINT_PATH}')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.001)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-    optimizer, 
-    patience=10,     # 等待10个epoch如果没有改善就调整学习率
-    factor=0.5,      # 调整因子：lr = lr * 0.5
-    mode='min'       # 监控指标越小越好（这里是loss）
-)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
+ # 学习率调度器
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1000)
+    
 
 # 5. 训练循环
 def train_model():
      # 6. 主训练流程
-    epoches=10
+    epoches=50
     print(f"Using device: {device}")
     for epoch in range(epoches):  # 仅训练10个epochs作为演示
         pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc="Training")
@@ -182,7 +179,7 @@ def train_model():
             optimizer.step()
             pbar.set_postfix({'Loss': f'{loss.item():.4f}', 'LR': f'{optimizer.param_groups[0]["lr"]:.6f}'})
             total_loss += loss.item()
-            #scheduler.step(loss.item())
+            scheduler.step()
         
         test_acc = evaluate(model, test_loader, device)
         print(f"Epoch {epoch+1}/{epoches} | Train Loss: {total_loss / len(train_loader):.4f} | Test Accuracy: {test_acc:.4f}")
@@ -296,9 +293,9 @@ if __name__ == "__main__":
     dataset =torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
     for cls in dataset.classes:
         print(cls)
-    #train_model()
+    train_model()
     #showsample()
     #show_image_data()
     #test_model_1()
-    test_by_file()
+    #test_by_file()
     pass

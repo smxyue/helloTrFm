@@ -5,3 +5,8 @@ vit_b_16_caltech101.pth
 best_vit_b_16_mnist.pth
 /testdata
 testdata.rar
+CNN_caltech101.pth
+CNN_caltech101-e40.pth
+CNN_caltech101-noAugment.pth
+myTransfmv2_small -20e.pth
+myTransfmv2_small.pth

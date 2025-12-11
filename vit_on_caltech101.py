@@ -8,6 +8,7 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import sys
 from CalTech101Dataset import CalTech101Dataset
+from mylib import show_paremeters
 
 
 model_path = "vit_b_16_caltech101.pth"
@@ -313,13 +314,20 @@ def test_test_dataset():
 def show_catalogries():
     dataset = CalTech101Dataset()
     categories = dataset.categories
+    print(dataset[1][0])
     dataset.close()
     print(f"Categories: {categories}")
     print(f"Total number of images: {len(dataset)}")
     
 if __name__ == '__main__':
     #main()
-    predict()
-    #show_catalogries()
+    #predict()
+    show_catalogries()
     #test_test_dataset()
+    model = ViTForMNIST(
+        model_name="vit_b_16",
+        pretrained=False,
+        num_classes=101
+    ).to(device)
+    show_paremeters(model)
     pass

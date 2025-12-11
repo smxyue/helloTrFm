@@ -1,22 +1,28 @@
 # 1. 环境准备
 import pickle
 import os
+from PIL import Image
 from matplotlib import pyplot as plt
+import numpy as np
 import torch
 import torch.nn as nn
 import torchvision
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader,Subset
 from tqdm import tqdm
 
+
 from CalTech101Dataset import CalTech101Dataset
+from mylib import load_images, resize_and_center, select_test_file
 from test_caltech_dataset import MYCaltechDataset
 
-CHECKPOINT_PATH = 'myTransfmv2.pth'
-train_dataset = CalTech101Dataset(data_dir="./processed")
+CHECKPOINT_PATH = 'myTransfmv2_small.pth'
+train_dataset = CalTech101Dataset(data_dir="./processed",train=True)
+#train_dataset = Subset(train_dataset, range(100))
+test_dataset = CalTech101Dataset(data_dir="./processed",train=False)
 
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-
+test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 # 3. Vision Transformer模型构建
 
 class PatchEmbedding(nn.Module):
@@ -93,7 +99,7 @@ class TransformerBlock(nn.Module):
 class VisionTransformer(nn.Module):
     """完整的Vision Transformer模型"""
     def __init__(self, img_size=224, patch_size=8, in_channels=3, n_classes=101, 
-                 embed_dim=128, depth=6, n_heads=8):
+                 embed_dim=192, depth=6, n_heads=6):
         super().__init__()
         
         # Patch嵌入层
@@ -139,6 +145,22 @@ class VisionTransformer(nn.Module):
         """计算模型参数量"""
         total_params = sum(p.numel() for p in self.parameters())
         return total_params
+    def init_weights(self):
+        for m in self.modules():
+            if isinstance(m, nn.Linear):
+                # 线性层用 xavier，避免输出爆炸
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.LayerNorm):
+                # LayerNorm 的 gamma 初始为 1, beta 为 0
+                nn.init.constant_(m.weight, 1.0)
+                nn.init.constant_(m.bias, 0)
+            elif isinstance(m, nn.Conv2d):
+                # Patch embedding 用 kaiming
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+                if m.bias is not None:
+                    nn.init.constant_(m.bias, 0)
 
 
 # 4. 训练配置
@@ -147,15 +169,21 @@ model = VisionTransformer().to(device)
 if os.path.exists(CHECKPOINT_PATH):
     model.load_state_dict(torch.load(CHECKPOINT_PATH, map_location=device), strict=False) 
     print('Loaded model from checkpoint.')
+else:
+    model.init_weights()
+    print('Initialized model weights.')
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min', patience=3, factor=0.5)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001,weight_decay=3e-1)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
 
 # 5. 训练循环
 def train_epoch(model, loader, criterion, optimizer, device):
     
+    total = 0
+    correct = 0
     total_loss = 0
+
     model.train()
     pbar = tqdm(enumerate(loader), total=len(loader), desc="Training")
     
@@ -167,23 +195,16 @@ def train_epoch(model, loader, criterion, optimizer, device):
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
-        #scheduler.step(loss)
         total_loss += loss.item()
-        pbar.set_postfix({'Loss': f'{loss.item():.4f}', 'LR': f'{optimizer.param_groups[0]["lr"]:.6f}'})
-        testdata = MYCaltechDataset(train=False)
-        test_loader = DataLoader(testdata, batch_size=32, shuffle=False)
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for images, labels in test_loader:
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-    print(f"Loss: {loss.item():.4f}Test Accuracy: {correct / total:.4f} Learning Rate: {optimizer.param_groups[0]['lr']:.6f}")        
-    return total_loss / len(loader)
+        
+        _, predicted = torch.max(outputs, 1)
+        total += labels.size(0)
+        correct += (predicted == labels).sum().item()
+    
+        train_acc = correct / total
+        pbar.set_postfix({'Loss': f'{loss.item():.4f}', 'LR': f'{optimizer.param_groups[0]["lr"]:.6f}','Train Acc':f'{train_acc:.2%}'})
+    
+    return total_loss / len(loader),correct / total
 
 def evaluate(model, loader, device):
     model.eval()
@@ -199,17 +220,17 @@ def evaluate(model, loader, device):
     return correct / total
 def maintrain():
     # 6. 主训练流程
+    epoches=20
     print(f"Using device: {device}")
-    for epoch in range(40):  # 仅训练10个epochs作为演示
-        train_loss = train_epoch(model, train_loader, criterion, optimizer, device)
-        #test_acc = evaluate(model, test_loader, device)
+    for epoch in range(epoches):  # 仅训练10个epochs作为演示
+        train_loss,train_accuracy = train_epoch(model, train_loader, criterion, optimizer, device)
+        test_accuracy = evaluate(model, test_loader, device)
         #print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
-        print(f"Epoch {epoch+1}/40 | Train Loss: {train_loss:.4f} ")
+        print(f"Epoch {epoch+1}/{epoches} | Train Loss: {train_loss:.4f} Train Accuracy:{train_accuracy:.4f} Test accuracy: {test_accuracy:.4f}")
+        scheduler.step()
     torch.save(model.state_dict(), CHECKPOINT_PATH)
     print(f"Training complete!state_dict saved to {CHECKPOINT_PATH}.")
-    # 预期输出（示例）：
-    # Epoch 1/10 | Train Loss: 1.9876 | Test Accuracy: 0.3124
-    # Epoch 10/10 | Train Loss: 0.4567 | Test Accuracy: 0.7245
+    
 
 
 def predict():
@@ -313,10 +334,56 @@ def predict():
             print(f"Error processing image: {str(e)}")
     fig.tight_layout()
     plt.show()
+def test_by_file():
+    preprocess = transforms.Compose([
+                transforms.Resize((224, 224)),  # ViT requires 224x224 images
+                transforms.ToTensor(),          # Convert to tensor and scale to [0,1]
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
+            ])
+    test_file=select_test_file(9)
+    
+    
+    processed_images = []
+    for f in test_file:
+        img=Image.open(f).convert('RGB')
+        img = resize_and_center(img, (224, 224))
+        image_array=np.array(img)
+        processed_img = torch.from_numpy(image_array).float()
+        processed_img = processed_img.permute(2, 0, 1) / 255.0  # Convert to CxHxW and scale to [0,1]
+        processed_images.append(processed_img)
+        test_tensors = torch.stack(processed_images)  # Stack into batch tensor
+    test_tensors=test_tensors.to(device)
+    model.eval()
+    with torch.no_grad():
+        outputs = model(test_tensors)
+        probabilities = torch.nn.functional.softmax(outputs, dim=1)
+        predicted_classes = torch.argmax(probabilities, dim=1)  # Get predicted class for each sample
+         # Get category name if available
+        #probs, predicted = torch.max(outputs.data, 1)
+        fig,axes=plt.subplots(3,3, figsize=(15,15))
+        axes=axes.flatten()
+        num_images = len(test_file)
+        for i in range(num_images):
+            img = test_tensors[i].permute(1, 2, 0).cpu().numpy()  # Convert tensor to HWC format for plotting
+            pred = predicted_classes[i].item()
+            prob = probabilities[i][pred].item()  # Probability of the predicted class for this sample
+            
+            axes[i].imshow(img)
+            # Make sure we don't access out-of-bounds category index
+            if hasattr(train_dataset, 'categories') and pred < len(train_dataset.categories):
+                category_name = train_dataset.categories[pred]
+            else:
+                category_name = f"Class {pred}"
+                
+            axes[i].set_title(f'Pred: {category_name} ({prob:.2f})')
+            axes[i].axis('off')
+        fig.tight_layout()
+        plt.show()
 if __name__ == "__main__":
     #model = VisionTransformer().to(device)
     #print(model.netsize())
     maintrain()
+    #test_by_file()
     #predict()
     #showsample()
     #show_image_data()
