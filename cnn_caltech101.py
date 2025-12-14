@@ -111,7 +111,7 @@ class CNN_Caltech101Net(nn.Module):
         x = self.classifier(x)
         return x
     def trainModel(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=0.0001,weight_decay=0.3)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=0.001,weight_decay=0.3)
         criterion = nn.CrossEntropyLoss()
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=20)
         epochs = 20

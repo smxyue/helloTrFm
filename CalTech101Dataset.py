@@ -90,8 +90,6 @@ class CalTech101Dataset:
         self.image_infos = metadata["images"]
         if "BACKGROUND_Google" in self.categories:
             self.categories.remove("BACKGROUND_Google")
-        print(f"加载数据集: {self.num_images} 张图片, {len(self.categories)} 个类别")
-        print(f"图像尺寸: {self.image_size}")
     def _prepare_train_test_indices(self):
         """
         准备训练和测试数据索引

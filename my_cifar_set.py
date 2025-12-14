@@ -75,8 +75,16 @@ def show_sample():
     fig,axes=plt.subplots(6,6, figsize=(10,10))
     axes=axes.ravel()
     startIndex = np.random.randint(0, len(train_datas[0]) - 36)
+    # CIFAR-10 dataset mean and std values (per channel)
+    cifar10_mean = np.array([0.4914, 0.4822, 0.4465])
+    cifar10_std = np.array([0.2023, 0.1994, 0.2010])
     for i in range(36):
         img = train_datas[startIndex + i].reshape(3, 32, 32).transpose(1, 2, 0)
+        #img_normalized = (img - cifar10_mean) / cifar10_std
+        
+        # Clip values to valid range [0, 1] for display
+        #img_normalized = np.clip(img_normalized, 0, 1)
+        
         axes[i].imshow(img,vmin=0,vmax=0.2)
         axes[i].set_title(categories[train_labels[startIndex+i]])
         axes[i].axis('off')

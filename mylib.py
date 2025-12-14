@@ -21,8 +21,8 @@ def select_test_file(count):
             image_path = filedialog.askopenfilename(
                 title="Select a JPG Image",
                 filetypes=[
-                    ("JPEG files", "*.jpg *.jpeg"),
                     ("PNG files", "*.png"),
+                    ("JPEG files", "*.jpg *.jpeg"),
                     ("All image files", "*.jpg *.jpeg *.png *.bmp"),
                     ("All files", "*.*")
                 ]
