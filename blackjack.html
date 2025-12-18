@@ -1,0 +1,588 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>21点游戏</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f4c75 0%, #1b262c 100%);
+            color: white;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        .game-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #ffd700;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        .scores {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .score-box {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 15px 30px;
+            border-radius: 10px;
+            text-align: center;
+            margin: 10px;
+            border: 2px solid rgba(255, 215, 0, 0.3);
+        }
+        
+        .score-box h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+        }
+        
+        .score {
+            font-size: 2em;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        
+        .game-area {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            margin-bottom: 30px;
+        }
+        
+        .player-area, .dealer-area {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px;
+            min-width: 300px;
+            flex: 1;
+        }
+        
+        .cards-container {
+            min-height: 150px;
+            margin: 15px 0;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .card {
+            width: 80px;
+            height: 120px;
+            background: white;
+            border-radius: 8px;
+            margin: 5px;
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2em;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: transform 0.3s;
+        }
+        
+        .card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .card.red {
+            color: red;
+        }
+        
+        .card.black {
+            color: black;
+        }
+        
+        .card-back {
+            background: linear-gradient(45deg, #0f4c75, #3282b8);
+            color: white;
+            font-size: 1em;
+        }
+        
+        .hand-info {
+            text-align: center;
+            margin: 10px 0;
+            font-size: 1.2em;
+        }
+        
+        .controls {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background: #3282b8;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 5px;
+            border-radius: 8px;
+            font-size: 1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:hover {
+            background: #0f4c75;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:disabled {
+            background: #555;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        
+        .strategy-tip {
+            background: rgba(255, 215, 0, 0.2);
+            border: 2px solid #ffd700;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            text-align: center;
+            font-size: 1.1em;
+            display: none;
+        }
+        
+        .strategy-tip.show {
+            display: block;
+            animation: fadeIn 0.5s;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .message {
+            text-align: center;
+            font-size: 1.3em;
+            margin: 20px 0;
+            min-height: 30px;
+        }
+        
+        .win { color: #4caf50; }
+        .lose { color: #f44336; }
+        .push { color: #ff9800; }
+        .blackjack { color: #ffd700; }
+        
+        .action-buttons {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>🃏 21点 Blackjack 🃏</h1>
+        
+        <div class="scores">
+            <div class="score-box">
+                <h2>玩家分数</h2>
+                <div class="score" id="playerScore">0</div>
+            </div>
+            <div class="score-box">
+                <h2>庄家分数</h2>
+                <div class="score" id="dealerScore">0</div>
+            </div>
+        </div>
+        
+        <div class="strategy-tip" id="strategyTip">
+            <strong>💡 策略建议：</strong><span id="tipContent"></span>
+        </div>
+        
+        <div class="message" id="message"></div>
+        
+        <div class="game-area">
+            <div class="dealer-area">
+                <h2>庄家（电脑）</h2>
+                <div class="hand-info">点数: <span id="dealerPoints">-</span></div>
+                <div class="cards-container" id="dealerCards"></div>
+            </div>
+            
+            <div class="player-area">
+                <h2>玩家（你）</h2>
+                <div class="hand-info">点数: <span id="playerPoints">-</span></div>
+                <div class="cards-container" id="playerCards"></div>
+            </div>
+        </div>
+        
+        <div class="controls" id="gameControls">
+            <div class="action-buttons">
+                <button id="hitBtn" onclick="game.hit()">要牌 (Hit)</button>
+                <button id="standBtn" onclick="game.stand()">停牌 (Stand)</button>
+                <button id="doubleBtn" onclick="game.doubleDown()">加倍 (Double)</button>
+                <button id="splitBtn" onclick="game.split()" disabled>分牌 (Split)</button>
+                <button id="surrenderBtn" onclick="game.surrender()">投降 (Surrender)</button>
+            </div>
+            <button id="newGameBtn" onclick="game.startNewGame()">开始新游戏</button>
+        </div>
+    </div>
+
+    <script>
+        class BlackjackGame {
+            constructor() {
+                this.deck = [];
+                this.playerCards = [];
+                this.dealerCards = [];
+                this.playerScore = 0;
+                this.dealerScore = 0;
+                this.gameOver = true;
+                this.playerTurn = false;
+                this.hasSplit = false;
+                this.currentBet = 1;
+                
+                this.initializeDeck();
+                this.loadScores(); // 自动加载分数
+                this.updateScoreDisplay();
+                this.startNewGame();
+                
+                // 页面关闭前自动保存
+                window.addEventListener('beforeunload', () => {
+                    this.saveScores();
+                });
+            }
+            
+            initializeDeck() {
+                const suits = ['♠', '♥', '♦', '♣'];
+                const values = [
+                    {value: 2, display: '2'}, {value: 3, display: '3'}, 
+                    {value: 4, display: '4'}, {value: 5, display: '5'}, 
+                    {value: 6, display: '6'}, {value: 7, display: '7'}, 
+                    {value: 8, display: '8'}, {value: 9, display: '9'}, 
+                    {value: 10, display: '10'}, {value: 10, display: 'J'}, 
+                    {value: 10, display: 'Q'}, {value: 10, display: 'K'}, 
+                    {value: 11, display: 'A'}
+                ];
+                
+                this.deck = [];
+                for (let suit of suits) {
+                    for (let card of values) {
+                        this.deck.push({
+                            suit: suit,
+                            value: card.value,
+                            display: card.display,
+                            color: (suit === '♥' || suit === '♦') ? 'red' : 'black'
+                        });
+                    }
+                }
+            }
+            
+            shuffleDeck() {
+                for (let i = this.deck.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [this.deck[i], this.deck[j]] = [this.deck[j], this.deck[i]];
+                }
+            }
+            
+            dealCard() {
+                if (this.deck.length < 10) {
+                    this.initializeDeck();
+                    this.shuffleDeck();
+                }
+                return this.deck.pop();
+            }
+            
+            calculatePoints(hand) {
+                let points = 0;
+                let aces = 0;
+                
+                for (let card of hand) {
+                    if (card.value === 11) {
+                        aces++;
+                        points += 11;
+                    } else {
+                        points += card.value;
+                    }
+                }
+                
+                while (points > 21 && aces > 0) {
+                    points -= 10;
+                    aces--;
+                }
+                
+                return points;
+            }
+            
+            displayCard(card, isFaceDown = false) {
+                if (isFaceDown) {
+                    return `<div class="card card-back">?</div>`;
+                }
+                return `<div class="card ${card.color}">${card.display}${card.suit}</div>`;
+            }
+            
+            updateDisplay() {
+                const dealerPoints = this.calculatePoints(this.dealerCards);
+                document.getElementById('dealerPoints').textContent = 
+                    this.gameOver ? dealerPoints : `${this.calculatePoints([this.dealerCards[0]])}+?`;
+                
+                let dealerHtml = '';
+                if (this.dealerCards.length > 0) {
+                    dealerHtml += this.displayCard(this.dealerCards[0]);
+                    if (this.dealerCards.length > 1) {
+                        dealerHtml += this.displayCard(this.dealerCards[1], !this.gameOver);
+                    }
+                    for (let i = 2; i < this.dealerCards.length; i++) {
+                        dealerHtml += this.displayCard(this.dealerCards[i], !this.gameOver);
+                    }
+                }
+                document.getElementById('dealerCards').innerHTML = dealerHtml;
+                
+                const playerPoints = this.calculatePoints(this.playerCards);
+                document.getElementById('playerPoints').textContent = playerPoints;
+                
+                let playerHtml = '';
+                for (let card of this.playerCards) {
+                    playerHtml += this.displayCard(card);
+                }
+                document.getElementById('playerCards').innerHTML = playerHtml;
+                
+                const canSplit = this.canSplit();
+                document.getElementById('splitBtn').disabled = !canSplit || this.hasSplit;
+                document.getElementById('doubleBtn').disabled = this.playerCards.length > 2;
+                document.getElementById('surrenderBtn').disabled = this.playerCards.length > 2;
+                
+                if (this.playerScore < this.dealerScore && this.playerTurn && !this.gameOver) {
+                    this.showStrategyTip();
+                } else {
+                    this.hideStrategyTip();
+                }
+            }
+            
+            canSplit() {
+                return this.playerCards.length === 2 && 
+                       this.playerCards[0].value === this.playerCards[1].value;
+            }
+            
+            showStrategyTip() {
+                const tip = this.getStrategyTip();
+                document.getElementById('tipContent').textContent = tip;
+                document.getElementById('strategyTip').classList.add('show');
+            }
+            
+            hideStrategyTip() {
+                document.getElementById('strategyTip').classList.remove('show');
+            }
+            
+            getStrategyTip() {
+                const playerPoints = this.calculatePoints(this.playerCards);
+                const dealerUpCard = this.dealerCards[0];
+                const dealerValue = dealerUpCard.value;
+                
+                if (this.canSplit()) {
+                    const pairValue = this.playerCards[0].value;
+                    if (pairValue === 11) return "你有A对子！一定要分牌！";
+                    if (pairValue === 8) return "你有8对子！分牌把16点变成两手强牌！";
+                    if (pairValue === 10) return "你有10对子！不要分牌，20点已经很强了！";
+                    if (pairValue === 5) return "你有5对子！不要分牌，10点适合加倍！";
+                }
+                
+                if (this.playerCards.some(card => card.value === 11)) {
+                    if (playerPoints >= 19) return "软19-21点！停牌！";
+                    if (playerPoints === 18) {
+                        if (dealerValue >= 9 || dealerValue === 11) return "软18点vs强牌！要牌！";
+                        return "软18点！停牌！";
+                    }
+                    if (playerPoints <= 17) return "软17点或更低！要牌！";
+                }
+                
+                if (playerPoints >= 17) return "硬17点以上！停牌！";
+                if (playerPoints >= 13) {
+                    if (dealerValue <= 6) return "13-16点，庄家弱！停牌！";
+                    return "13-16点，庄家强！要牌！";
+                }
+                if (playerPoints === 12) {
+                    if (dealerValue >= 4 && dealerValue <= 6) return "12点，庄家4-6！停牌！";
+                    return "12点！要牌！";
+                }
+                if (playerPoints === 11) {
+                    return "11点！加倍！争取拿到21点！";
+                }
+                if (playerPoints === 10) {
+                    if (dealerValue <= 9) return "10点，庄家弱！加倍！";
+                    return "10点！要牌！";
+                }
+                if (playerPoints <= 9) return "9点或更低！要牌！";
+                
+                return "根据基本策略，仔细观察庄家明牌！";
+            }
+            
+            startNewGame() {
+                this.shuffleDeck();
+                this.playerCards = [this.dealCard(), this.dealCard()];
+                this.dealerCards = [this.dealCard(), this.dealCard()];
+                this.gameOver = false;
+                this.playerTurn = true;
+                this.hasSplit = false;
+                this.currentBet = 1;
+                
+                if (this.calculatePoints(this.playerCards) === 21) {
+                    this.showMessage('Blackjack! 恭喜！', 'blackjack');
+                    this.gameOver = true;
+                    this.playerScore += 1.5;
+                    this.updateDisplay();
+                    this.saveScores();
+                    return;
+                }
+                
+                this.showMessage('游戏开始！请选择你的行动...');
+                this.updateDisplay();
+            }
+            
+            hit() {
+                if (!this.playerTurn || this.gameOver) return;
+                
+                this.playerCards.push(this.dealCard());
+                const points = this.calculatePoints(this.playerCards);
+                
+                if (points > 21) {
+                    this.showMessage('爆牌了！你输了！', 'lose');
+                    this.gameOver = true;
+                    this.dealerScore += 1;
+                    this.updateDisplay();
+                    this.saveScores();
+                } else {
+                    this.showMessage(`你现在的点数是 ${points}`);
+                    this.updateDisplay();
+                }
+            }
+            
+            stand() {
+                if (!this.playerTurn || this.gameOver) return;
+                
+                this.playerTurn = false;
+                this.playDealerTurn();
+            }
+            
+            doubleDown() {
+                if (!this.playerTurn || this.gameOver || this.playerCards.length > 2) return;
+                
+                this.currentBet = 2;
+                this.playerCards.push(this.dealCard());
+                const points = this.calculatePoints(this.playerCards);
+                
+                if (points > 21) {
+                    this.showMessage('爆牌了！你输了！', 'lose');
+                    this.gameOver = true;
+                    this.dealerScore += this.currentBet;
+                } else {
+                    this.playerTurn = false;
+                    this.playDealerTurn();
+                }
+            }
+            
+            split() {
+                if (!this.canSplit() || this.gameOver) return;
+                
+                this.hasSplit = true;
+                const splitCard = this.playerCards.pop();
+                this.playerCards.push(this.dealCard());
+                
+                this.showMessage('分牌成功！继续玩第一手牌...');
+                this.updateDisplay();
+            }
+            
+            surrender() {
+                if (!this.playerTurn || this.gameOver || this.playerCards.length > 2) return;
+                
+                this.showMessage('你选择投降，损失一半赌注！', 'lose');
+                this.gameOver = true;
+                this.dealerScore += 0.5;
+                this.updateDisplay();
+                this.saveScores();
+            }
+            
+            playDealerTurn() {
+                while (this.calculatePoints(this.dealerCards) < 17) {
+                    this.dealerCards.push(this.dealCard());
+                }
+                
+                this.determineWinner();
+            }
+            
+            determineWinner() {
+                this.gameOver = true;
+                const playerPoints = this.calculatePoints(this.playerCards);
+                const dealerPoints = this.calculatePoints(this.dealerCards);
+                
+                let message = `玩家: ${playerPoints}点 | 庄家: ${dealerPoints}点<br>`;
+                
+                if (dealerPoints > 21) {
+                    message += '庄家爆牌！你赢了！';
+                    this.showMessage(message, 'win');
+                    this.playerScore += this.currentBet;
+                } else if (playerPoints > dealerPoints) {
+                    message += '恭喜！你赢了！';
+                    this.showMessage(message, 'win');
+                    this.playerScore += this.currentBet;
+                } else if (playerPoints < dealerPoints) {
+                    message += '很遗憾，你输了！';
+                    this.showMessage(message, 'lose');
+                    this.dealerScore += this.currentBet;
+                } else {
+                    message += '平局（Push）！';
+                    this.showMessage(message, 'push');
+                }
+                
+                this.updateDisplay();
+                this.saveScores();
+            }
+            
+            showMessage(text, className = '') {
+                const messageEl = document.getElementById('message');
+                messageEl.innerHTML = text;
+                messageEl.className = 'message ' + className;
+            }
+            
+            updateScoreDisplay() {
+                document.getElementById('playerScore').textContent = this.playerScore.toFixed(1);
+                document.getElementById('dealerScore').textContent = this.dealerScore.toFixed(1);
+            }
+            
+            saveScores() {
+                const data = {
+                    playerScore: this.playerScore,
+                    dealerScore: this.dealerScore,
+                    timestamp: new Date().toISOString()
+                };
+                localStorage.setItem('blackjackScores', JSON.stringify(data));
+            }
+            
+            loadScores() {
+                const saved = localStorage.getItem('blackjackScores');
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    this.playerScore = data.playerScore || 0;
+                    this.dealerScore = data.dealerScore || 0;
+                    this.updateScoreDisplay();
+                }
+            }
+        }
+        
+        const game = new BlackjackGame();
+    </script>
+</body>
+</html>

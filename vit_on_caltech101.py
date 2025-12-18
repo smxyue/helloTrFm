@@ -321,13 +321,9 @@ def show_catalogries():
     
 if __name__ == '__main__':
     #main()
-    #predict()
-    show_catalogries()
+    predict()
+    #show_catalogries()
     #test_test_dataset()
-    model = ViTForMNIST(
-        model_name="vit_b_16",
-        pretrained=False,
-        num_classes=101
-    ).to(device)
-    show_paremeters(model)
+    
+    #show_paremeters(model)
     pass

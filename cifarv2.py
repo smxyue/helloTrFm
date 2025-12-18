@@ -13,21 +13,26 @@ import torchvision.transforms as T
 
 from mylib import load_images, resize_and_center, select_test_file
 
-CHECKPOINT_PATH = 'trfm_mnist.pth'
+CHECKPOINT_PATH = 'cifarv2.pth'
+cifar_mean = [0.4914, 0.4822, 0.4465]
+cifar_std  = [0.2023, 0.1994, 0.2010]
 train_transform = T.Compose([
-    T.Pad(2),  # MNIST原图28x28，Pad到32x32
+    T.RandomCrop(32, padding=4),            # CIFAR 常用
+    T.RandomHorizontalFlip(),
+    T.ColorJitter(0.4, 0.4, 0.4, 0.1),
+    # 保守起见暂时移除 RandomPerspective/GaussianBlur/RandomAffine（可做实验开启）
     T.ToTensor(),
-    T.RandomAffine(degrees=15, translate=(0.1, 0.1), scale=(0.9, 1.1)),
-    T.RandomPerspective(distortion_scale=0.2, p=0.5),
-    T.RandomErasing(p=0.2)  # 对小图效果显著
+    T.Normalize(mean=cifar_mean, std=cifar_std),
+    T.RandomErasing(p=0.2)
 ])
+
 test_transform = T.Compose([
-    T.Pad(2),
     T.ToTensor(),
- ])
-train_dataset = torchvision.datasets.mnist.MNIST(root='./data', train=True, transform=train_transform, download=True)
+    T.Normalize(mean=cifar_mean, std=cifar_std),
+])
+train_dataset = torchvision.datasets.CIFAR10(root='./data', train=True, transform=train_transform, download=True)
 #train_dataset = Subset(train_dataset, range(100))
-test_dataset = torchvision.datasets.mnist.MNIST(root='./data', train=False, transform=test_transform, download=True)
+test_dataset = torchvision.datasets.CIFAR10(root='./data', train=False, transform=test_transform, download=True)
 
 train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=128, shuffle=False)
@@ -53,7 +58,7 @@ class PatchEmbedding(nn.Module):
 
 class Attention(nn.Module):
     """自注意力机制的核心"""
-    def __init__(self, embed_dim, n_heads=8):
+    def __init__(self, embed_dim, n_heads=8, dropout=0.1):
         super().__init__()
         self.n_heads = n_heads
         self.head_dim = embed_dim // n_heads
@@ -61,7 +66,8 @@ class Attention(nn.Module):
         # Q, K, V线性变换
         self.qkv = nn.Linear(embed_dim, embed_dim * 3)
         self.proj = nn.Linear(embed_dim, embed_dim)
-        
+        self.attn_drop = nn.Dropout(dropout)
+        self.proj_drop = nn.Dropout(dropout)
     def forward(self, x):
         batch_size, n_patches, embed_dim = x.shape
         
@@ -73,10 +79,13 @@ class Attention(nn.Module):
         # 计算注意力分数
         attn_scores = (q @ k.transpose(-2, -1)) / (self.head_dim ** 0.5)
         attn_probs = attn_scores.softmax(dim=-1)
-        
+        attn_probs = self.attn_drop(attn_probs)
+
         # 加权求和
         out = (attn_probs @ v).transpose(1, 2)  # (batch_size, n_patches, n_heads, head_dim)
         out = out.reshape(batch_size, n_patches, embed_dim)
+        out = self.proj(out)
+        out = self.proj_drop(out)
         return self.proj(out)
 
 class TransformerBlock(nn.Module):
@@ -106,8 +115,8 @@ class TransformerBlock(nn.Module):
     
 class VisionTransformer(nn.Module):
     """完整的Vision Transformer模型"""
-    def __init__(self, img_size=32, patch_size=4, in_channels=1, n_classes=10, 
-                 embed_dim=192, depth=8, n_heads=6):
+    def __init__(self, img_size=32, patch_size=4, in_channels=3, n_classes=10, 
+                 embed_dim=128, depth=6, n_heads=4):
         super().__init__()
         
         # Patch嵌入层
@@ -181,9 +190,9 @@ else:
     model.init_weights()
     print('Initialized model weights.')
 # 使用交叉熵损失和AdamW优化器
-criterion = nn.CrossEntropyLoss()
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4,weight_decay=0.05)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=10, eta_min=1e-6)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=1e-6)
 
 # 5. 训练循环
 def train_epoch(model, loader, criterion, optimizer, device):
@@ -202,6 +211,8 @@ def train_epoch(model, loader, criterion, optimizer, device):
         outputs = model(images)
         loss = criterion(outputs, labels)
         loss.backward()
+        # 梯度裁剪，防止不稳定
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         total_loss += loss.item()
         
@@ -227,17 +238,44 @@ def evaluate(model, loader, device):
     return correct / total
 def maintrain():
     # 6. 主训练流程
-    epoches=10
+    epoches=100
     print(f"Using device: {device}")
+    train_losses = []
+    train_accuracies = []
+    test_accuracies = []
     for epoch in range(epoches):  # 仅训练10个epochs作为演示
         train_loss,train_accuracy = train_epoch(model, train_loader, criterion, optimizer, device)
         test_accuracy = evaluate(model, test_loader, device)
         #print(f"Epoch {epoch+1}/10 | Train Loss: {train_loss:.4f} | Test Accuracy: {test_acc:.4f}")
         print(f"Epoch {epoch+1}/{epoches} | Train Loss: {train_loss:.4f} Train Accuracy:{train_accuracy:.4f} Test accuracy: {test_accuracy:.4f}")
         scheduler.step()
+        train_losses.append(train_loss)
+        train_accuracies.append(train_accuracy)
+        test_accuracies.append(test_accuracy)
     torch.save(model.state_dict(), CHECKPOINT_PATH)
     print(f"Training complete!state_dict saved to {CHECKPOINT_PATH}.")
     
+    epochs_range = range(1, epoches + 1)
+    
+    # Plot accuracies together
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs_range, train_accuracies, 'g-', marker='o', label='Training Accuracy')
+    plt.plot(epochs_range, test_accuracies, 'r-', marker='s', label='Test Accuracy')
+    plt.title('Training and Test Accuracy')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+    
+    # If you still want to see the loss plot separately
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs_range, train_losses, 'b-', marker='o')
+    plt.title('Training Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.show()
 
 
 def predict():
@@ -295,7 +333,7 @@ def predict():
         
             # Define preprocessing transforms (same as used during training)
             preprocess = T.Compose([
-                T.Resize((224, 224)),  # ViT requires 224x224 images
+                T.Resize((32, 32)),  # ViT requires 224x224 images
                 T.ToTensor(),          # Convert to tensor and scale to [0,1]
                 #.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
             ])
@@ -303,6 +341,7 @@ def predict():
             # Load and process image
             image = Image.open(image_path).convert('RGB')  # Ensure RGB format
             image = resize_and_center(image, (32, 32))
+
             input_tensor = preprocess(image)
             input_batch = input_tensor.unsqueeze(0).to(device)  # Add batch dimension
         
@@ -314,7 +353,7 @@ def predict():
                 predicted_class = torch.argmax(probabilities).item()
                 confidence = probabilities[predicted_class].item()
             # Get category name if available
-            predicted_category = f"Class {predicted_class}"    
+            predicted_category = f"{train_dataset.classes[predicted_class]}"    
             print(f"Predicted class index: {predicted_class}")
             print(f"Confidence: {confidence:.4f}")
             print(f"Top 5 predictions:")
@@ -341,50 +380,7 @@ def denormalize(tensor, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]):
     for t, m, s in zip(tensor, mean, std):
         t.mul_(s).add_(m)
     return tensor
-def test_by_file():
-    preprocess = T.Compose([
-                T.Resize((32, 32)),  # ViT requires 224x224 images
-                T.ToTensor(),          # Convert to tensor and scale to [0,1]
-            ])
-    test_file=select_test_file(9)
-    
-    
-    processed_images = []
-    for f in test_file:
-        img=Image.open(f).convert('L')
-        img = resize_and_center(img, (32, 32))
-        processed_img = 1.0-preprocess(img)
-        processed_images.append(processed_img)
-    test_tensors = torch.stack(processed_images)  # Stack into batch tensor
-    test_tensors=test_tensors.to(device)
-    model.eval()
-    with torch.no_grad():
-        outputs = model(test_tensors)
-        probabilities = torch.nn.functional.softmax(outputs, dim=1)
-        predicted_classes = torch.argmax(probabilities, dim=1)  # Get predicted class for each sample
-         # Get category name if available
-        #probs, predicted = torch.max(outputs.data, 1)
-        fig,axes=plt.subplots(3,3, figsize=(15,15))
-        axes=axes.flatten()
-        num_images = len(test_file)
-        for i in range(num_images):
-            img = test_tensors[i].cpu().numpy()  # Clone to avoid modifying original
-            img=np.squeeze(img)
-            #img = denormalize(img)
-            #img = img.permute(1, 2, 0).cpu().numpy()
-            img = np.clip(img, 0, 1)  # Ensure values are in [0,1] range
-            axes[i].imshow(img)
-            pred = predicted_classes[i].item()
-            prob = probabilities[i][pred].item()  # Probability of the predicted class for this sample
-            
-            axes[i].imshow(img)
-            # Make sure we don't access out-of-bounds category index
-            category_name = f"Digit {pred}"
-            
-            axes[i].set_title(f'Pred: {category_name} ({prob:.2f})')
-            axes[i].axis('off')
-        fig.tight_layout()
-        plt.show()
+
 def testmnist_dataset():
     startIndex = torch.randint(0, len(train_dataset) - 9, (1,)).item()
     img,lable = train_dataset[startIndex]
@@ -409,10 +405,9 @@ if __name__ == "__main__":
     #model = VisionTransformer().to(device)
     #print(model.netsize())
     #maintrain()
-    #test_by_file()
-    #predict()
+    predict()
     #showsample()
     #show_image_data()
     #testmnist_dataset()
-    show_dataset(train_dataset)
+    #show_dataset(train_dataset)
     pass

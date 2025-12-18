@@ -157,7 +157,7 @@ if os.path.exists(CHECKPOINT_PATH):
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001)
  # 学习率调度器
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=1000)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50)
     
 
 # 5. 训练循环
@@ -239,7 +239,7 @@ def test_model_1():
     total = 0
     err_sample = []
     with torch.no_grad():
-        for images, labels in train_loader:
+        for images, labels in test_loader:
             images, labels = images.to(device), labels.to(device)
             outputs = model(images)
             _, predicted = torch.max(outputs.data, 1)
@@ -289,13 +289,14 @@ def show_image_data():
     images, labels = train_dataset[0]
     print(f"Image shape: {images.shape}, Label: {labels}")
     print(images)
+def show_labels():
+    classnames=train_dataset.classes
+    print(classnames)
 if __name__ == "__main__":
-    dataset =torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
-    for cls in dataset.classes:
-        print(cls)
-    train_model()
+    #train_model()
     #showsample()
     #show_image_data()
     #test_model_1()
-    #test_by_file()
+    test_by_file()
+    #show_labels()
     pass

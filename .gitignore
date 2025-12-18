@@ -10,3 +10,4 @@ CNN_caltech101-e40.pth
 CNN_caltech101-noAugment.pth
 myTransfmv2_small -20e.pth
 myTransfmv2_small.pth
+trfm_mnist.pth
