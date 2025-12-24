@@ -21,6 +21,9 @@ train_transform = T.Compose([
     T.RandomHorizontalFlip(),
     T.ColorJitter(0.4, 0.4, 0.4, 0.1),
     # 保守起见暂时移除 RandomPerspective/GaussianBlur/RandomAffine（可做实验开启）
+    T.ColorJitter(0.4, 0.4, 0.4, 0.1),
+    T.RandomGrayscale(p=0.2),
+    T.GaussianBlur(5, sigma=(0.1, 2.0)),
     T.ToTensor(),
     T.Normalize(mean=cifar_mean, std=cifar_std),
     T.RandomErasing(p=0.2)
@@ -192,7 +195,7 @@ else:
 # 使用交叉熵损失和AdamW优化器
 criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4,weight_decay=0.05)
-scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=100, eta_min=1e-6)
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=50, eta_min=1e-6)
 
 # 5. 训练循环
 def train_epoch(model, loader, criterion, optimizer, device):
@@ -238,7 +241,7 @@ def evaluate(model, loader, device):
     return correct / total
 def maintrain():
     # 6. 主训练流程
-    epoches=100
+    epoches=50
     print(f"Using device: {device}")
     train_losses = []
     train_accuracies = []
@@ -335,6 +338,7 @@ def predict():
             preprocess = T.Compose([
                 T.Resize((32, 32)),  # ViT requires 224x224 images
                 T.ToTensor(),          # Convert to tensor and scale to [0,1]
+                T.Normalize(mean=cifar_mean, std=cifar_std),
                 #.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])  # ImageNet normalization
             ])
         

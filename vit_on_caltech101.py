@@ -64,10 +64,13 @@ class ViTForMNIST(nn.Module):
         
         # Modify classification head (from 1000 classes to desired number)
         self.vit.heads = nn.Linear(self.vit.heads.head.in_features, num_classes)
-        if os.path.exists(model_path):
-            self.load_state_dict(torch.load(model_path,map_location=device))
-            print(f"Loaded pretrained weights from {model_path}")
-        
+        #if os.path.exists(model_path):
+        #    self.load_state_dict(torch.load(model_path,map_location=device))
+        #    print(f"Loaded pretrained weights from {model_path}")
+        for param in self.vit.parameters():
+            param.requires_grad = False
+        for param in self.vit.heads.parameters():
+            param.requires_grad = True
     def forward(self, x):
         return self.vit(x)
 
@@ -128,8 +131,8 @@ def main():
     # 超参数配置
     config = {
         'batch_size': 32,
-        'epochs': 5,
-        'lr': 1e-4,
+        'epochs': 1,
+        'lr': 1e-3,
         'model_name': 'vit_b_16',  # 可选: 'vit_b_16', 'vit_b_32', 'vit_l_16', 'vit_l_32'
         'pretrained': True,  # 使用ImageNet预训练权重
     }
@@ -151,7 +154,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
     
     # 如果使用预训练模型，建议使用较小的学习率
-    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-4)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=config['lr'], weight_decay=1e-1)
     
     # 学习率调度器
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config['epochs'])
@@ -318,12 +321,20 @@ def show_catalogries():
     dataset.close()
     print(f"Categories: {categories}")
     print(f"Total number of images: {len(dataset)}")
+def save_none_train_model():
+    model = ViTForMNIST(
+        model_name="vit_b_16",
+        pretrained=True,
+        num_classes=101
+    ).to(device)
+    torch.save(model.state_dict(), "vit_b_16_caltech101_none_train.pth")
+    print("Model saved")
     
 if __name__ == '__main__':
-    #main()
-    predict()
+    main()
+    #predict()
     #show_catalogries()
     #test_test_dataset()
-    
+    #save_none_train_model()
     #show_paremeters(model)
     pass
